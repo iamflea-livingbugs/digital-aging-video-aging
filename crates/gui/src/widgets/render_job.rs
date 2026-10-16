@@ -7,6 +7,7 @@ use crate::app::{
     error::ApplicationError,
     format_eta::format_eta,
     render_job::{RenderJob, RenderJobProgress, RenderJobState},
+    translations::tr,
 };
 
 pub struct RenderJobWidget<'a> {
@@ -86,26 +87,29 @@ impl RenderJobWidget<'_> {
                     }
 
                     ui.label(match &job_state {
-                        RenderJobState::Waiting => Cow::Borrowed("Waiting..."),
+                        RenderJobState::Waiting => Cow::Borrowed(tr("Waiting...")),
                         RenderJobState::Rendering => {
                             if let (Some(position), Some(duration)) = (job_position, job_duration) {
                                 Cow::Owned(format!(
-                                    "Rendering... ({:.2} / {:.2})",
-                                    position, duration
+                                    "{} ({:.2} / {:.2})",
+                                    tr("Rendering..."),
+                                    position,
+                                    duration
                                 ))
                             } else {
-                                Cow::Borrowed("Rendering...")
+                                Cow::Borrowed(tr("Rendering..."))
                             }
                         }
-                        RenderJobState::Paused => Cow::Borrowed("Paused"),
+                        RenderJobState::Paused => Cow::Borrowed(tr("Paused")),
                         // if the job's start_time is missing, it's probably because it never got a chance to update--in that case, just say it took 0 seconds
                         RenderJobState::Complete { end_time } => Cow::Owned(format!(
-                            "Completed in {:.2}",
+                            "{} {:.2}",
+                            tr("Completed in"),
                             ClockTime::from_mseconds(
                                 ((*end_time - job.start_time.unwrap_or(*end_time)) * 1000.0) as u64
                             )
                         )),
-                        RenderJobState::Error(err) => Cow::Owned(format!("Error: {err}")),
+                        RenderJobState::Error(err) => Cow::Owned(format!("{}{err}", tr("Error:"))),
                     });
 
                     if matches!(
@@ -113,14 +117,14 @@ impl RenderJobWidget<'_> {
                         RenderJobState::Rendering | RenderJobState::Paused
                     ) && let Some(time_remaining) = estimated_time_remaining
                     {
-                        let mut label = String::from("Time remaining: ");
+                        let mut label = String::from(tr("Time remaining: "));
                         format_eta(
                             &mut label,
                             time_remaining,
                             [
-                                [" hour", " hours"],
-                                [" minute", " minutes"],
-                                [" second", " seconds"],
+                                [tr(" hour"), tr(" hours")],
+                                [tr(" minute"), tr(" minutes")],
+                                [tr(" second"), tr(" seconds")],
                             ],
                             ", ",
                         );
@@ -128,7 +132,7 @@ impl RenderJobWidget<'_> {
                     }
                     if matches!(job_state, RenderJobState::Complete { .. }) {
                         ui.horizontal(|ui| {
-                            if ui.button("Open containing folder").clicked()
+                            if ui.button(tr("Open containing folder")).clicked()
                                 && let Some(parent) = job.settings.output_path.parent()
                             {
                                 let _ = open::that_detached(parent);

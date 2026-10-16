@@ -9,6 +9,7 @@ use tinyjson::JsonValue;
 use ureq::{config::Config, tls::TlsConfig};
 
 use crate::app::layout_helper::LayoutHelper;
+use crate::app::translations::tr;
 
 pub struct UpdateResponse {
     latest_release_label: String,
@@ -50,26 +51,26 @@ impl UpdateDialogState {
             }
         }
         let mut open = !matches!(self, UpdateDialogState::Closed);
-        egui::Window::new("Check for Updates")
+        egui::Window::new(tr("Check for Updates"))
             .open(&mut open)
             .show(ctx, |ui| match &self {
                 UpdateDialogState::Closed => {}
                 UpdateDialogState::Loading(_) => {
                     ui.ltr(|ui| {
-                        ui.label("Checking for updates... ");
+                        ui.label(tr("Checking for updates... "));
                         ui.add(egui::Spinner::new());
                     });
                 }
                 UpdateDialogState::Loaded(update_response) => {
                     ui.heading(&update_response.latest_release_label);
                     if update_response.up_to_date {
-                        ui.label("✓ Up to date");
-                    } else if ui.button("Download from GitHub ⤴").clicked() {
+                        ui.label(tr("✓ Up to date"));
+                    } else if ui.button(tr("Download from GitHub ⤴")).clicked() {
                         ctx.open_url(egui::OpenUrl::new_tab(&update_response.download_url));
                     }
                 }
                 UpdateDialogState::Error(error) => {
-                    ui.label("Error checking for updates:");
+                    ui.label(tr("Error checking for updates:"));
                     ui.monospace(error.to_string());
                 }
             });
@@ -123,7 +124,7 @@ impl UpdateDialogState {
                 let up_to_date = tag_name.strip_prefix("v") == Some(env!("CARGO_PKG_VERSION"));
 
                 Ok(UpdateResponse {
-                    latest_release_label: format!("Latest version: {tag_name}"),
+                    latest_release_label: format!("{} {tag_name}", tr("Latest version:")),
                     download_url: html_url.clone(),
                     up_to_date,
                 })
