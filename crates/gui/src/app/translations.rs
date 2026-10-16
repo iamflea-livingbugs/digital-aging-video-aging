@@ -169,6 +169,19 @@ pub fn tr(text: &str) -> &str {
         "Interleaved (upper first)" => "交错（上场优先）",
         "Interleaved (lower first)" => "交错（下场优先）",
         "Both" => "全部",
+        "Video standard" => "视频制式",
+        "North American/Japanese standard. Phase errors show up as hue \
+         shifts." =>
+            "北美/日本制式。相位误差表现为色调偏移。",
+        "Chinese/European standard. Phase errors show up as reduced \
+         saturation and vertical color blur instead of hue shifts." =>
+            "中国/欧洲制式。相位误差表现为饱和度下降与色彩垂直模糊，而非色调偏移。",
+        "The analog color encoding standard to simulate. PAL inverts the phase of the \
+         V (red-cyan) chrominance component on every other scanline and averages \
+         adjacent lines, trading vertical color resolution for immunity to hue \
+         errors." =>
+            "要模拟的模拟彩色编码制式。PAL 每隔一行翻转 V（红-青）色度分量的相位，\
+             并对相邻行做平均，用垂直色彩分辨率换取对色调误差的免疫。",
         "Lowpass filter type" => "低通滤波器类型",
         "Constant K (blurry)" => "恒定 K（模糊）",
         "Butterworth (sharper)" => "巴特沃斯（更锐利）",
@@ -391,6 +404,7 @@ mod tests {
         for label in [
             "Random seed",
             "Use field",
+            "Video standard",
             "Lowpass filter type",
             "Input luma filter",
             "Chroma low-pass in",

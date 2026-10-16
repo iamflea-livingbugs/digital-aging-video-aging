@@ -133,6 +133,8 @@ struct EffectCtx {
     horizontal_scale: f32,
     /// The "vertical scale" setting.
     vertical_scale: f32,
+    /// Whether to simulate PAL instead of NTSC (phase-alternating V component + delay-line decode).
+    pal: bool,
 }
 
 struct FixedQueue<T, const N: usize> {
@@ -191,6 +193,7 @@ impl EffectCtx {
                     .as_option()
                     .map(|scale| scale.vertical_scale)
                     .unwrap_or(1.0),
+            pal: settings.video_standard == VideoStandard::Pal,
         }
     }
 
@@ -336,6 +339,13 @@ impl EffectCtx {
         (self.frame_num + (line_index << 1)) & 2
     }
 
+    /// PAL inverts the V (Q) component's phase on every other line ("phase alternating line").
+    /// Returns the sign to multiply the Q component by for the given line.
+    #[inline(always)]
+    fn pal_v_switch(&self, line_index: usize) -> f32 {
+        if self.pal && line_index & 1 == 1 { -1.0 } else { 1.0 }
+    }
+
     /// Modulate the chrominance signal (I and Q planes) into the Y (luminance) plane.
     /// TODO: Make the chroma carrier's frequency/sample rate configurable.
     #[inline(always)]
@@ -361,8 +371,9 @@ impl EffectCtx {
                         })
                     };
 
+                    let v_switch = self.pal_v_switch(index);
                     let i_mult = offset_wave(xi);
-                    let q_mult = offset_wave(xi + 3);
+                    let q_mult = offset_wave(xi + 3) * S::f32s::splat(simd, v_switch);
                     let mut y_chunks = y.chunks_exact_mut(S::f32s::N);
                     let mut i_chunks = i.chunks_exact(S::f32s::N);
                     let mut q_chunks = q.chunks_exact(S::f32s::N);
@@ -385,7 +396,7 @@ impl EffectCtx {
                         .enumerate()
                     {
                         let phase = (index + xi) & 3;
-                        *y += i * I_MULT[phase] + q * Q_MULT[phase];
+                        *y += i * I_MULT[phase] + q * Q_MULT[phase] * v_switch;
                     }
                 },
             )
@@ -419,12 +430,13 @@ impl EffectCtx {
             })
         };
         let xi = self.chroma_phase_shift(line_index);
+        let v_switch = S::f32s::splat(simd, self.pal_v_switch(line_index));
         let i_mult_inv_l = offset_wave(xi) * 0.5;
         let i_mult_inv_c = offset_wave(1 + xi);
         let i_mult_inv_r = offset_wave(2 + xi) * 0.5;
-        let q_mult_inv_l = offset_wave(3 + xi) * 0.5;
-        let q_mult_inv_c = offset_wave(4 + xi);
-        let q_mult_inv_r = offset_wave(5 + xi) * 0.5;
+        let q_mult_inv_l = offset_wave(3 + xi) * 0.5 * v_switch;
+        let q_mult_inv_c = offset_wave(4 + xi) * v_switch;
+        let q_mult_inv_r = offset_wave(5 + xi) * 0.5 * v_switch;
 
         let mut index = 1;
         while index < width.saturating_sub(S::f32s::N) {
@@ -476,7 +488,7 @@ impl EffectCtx {
                 q_modulated += chroma_l * Q_MULT_INV[offset_l] * 0.5;
             }
             i[index] = i_modulated;
-            q[index] = q_modulated;
+            q[index] = q_modulated * self.pal_v_switch(line_index);
         }
     }
 
@@ -964,11 +976,13 @@ impl EffectCtx {
     }
 
     /// Emulate timing error in the chrominance carrier, which results in a hue shift.
+    /// In PAL mode, the error alternates sign per line; after the delay-line average this
+    /// cancels the hue shift and shows up as reduced saturation instead.
     fn chroma_phase_error(&self, yiq: &mut YiqView, intensity: f32) {
         let width = yiq.dimensions.0;
 
-        ZipChunks::new([yiq.i, yiq.q], width).par_for_each(|_, [i, q]| {
-            Self::chroma_phase_offset_line(i, q, intensity);
+        ZipChunks::new([yiq.i, yiq.q], width).par_for_each(|index, [i, q]| {
+            Self::chroma_phase_offset_line(i, q, intensity * self.pal_v_switch(index));
         });
     }
 
@@ -985,7 +999,7 @@ impl EffectCtx {
             let phase_shift =
                 (rng.clone().mix(index as u64).random::<f32>() - 0.5) * 2.0 * intensity;
 
-            Self::chroma_phase_offset_line(i, q, phase_shift);
+            Self::chroma_phase_offset_line(i, q, phase_shift * self.pal_v_switch(index));
         });
     }
 
@@ -1656,7 +1670,9 @@ impl NtscEffect {
             }
         }
 
-        if self.chroma_vert_blend {
+        // PAL decoders always average adjacent lines (the 1H delay line); this is what turns
+        // phase errors into desaturation and halves the vertical chroma resolution.
+        if self.chroma_vert_blend || ctx.pal {
             ctx.chroma_vert_blend(yiq);
         }
 
