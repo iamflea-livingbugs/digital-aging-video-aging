@@ -1,16 +1,18 @@
-# NTSC-loc — ntsc-rs 中文汉化分支
+# 数字旧化 | 视频旧化 Digital aging – Video aging — ntsc-rs 中文汉化 + PAL 分支
 
-> ntsc-rs 的**显示层汉化**分支。上游 [ntsc-rs/ntsc-rs](https://github.com/ntsc-rs/ntsc-rs) 明确无 i18n 计划（issue #451），本分支以「不改数据、只翻界面」的方式做了中文汉化，保证与上游预设/配置完全兼容。
+> 基于 [ntsc-rs/ntsc-rs](https://github.com/ntsc-rs/ntsc-rs) 0.9.6 的独立下游分支，在上游 NTSC/VHS 复合视频信号仿真器之上做了两件事：
+> 1. **简体中文界面汉化**——显示层查找表方案，预设/配置键名/保存格式与上游字节级兼容（上游明确无 i18n 计划，issue #451）；
+> 2. **PAL 视频制式模拟**——新增「视频制式」设置项，复刻 PAL「逐行倒相 + 行间平均」的视觉特征（路线 A：模拟观众可见特征，不严格复刻物理参数）。
 
 ---
 
 ## 一、这是什么
 
-一个把 NTSC/VHS 复合视频信号仿真器 [ntsc-rs](https://ntsc.rs) 的图形界面汉化成中文的独立分支。
+一个把 NTSC/VHS 复合视频信号仿真器 [ntsc-rs](https://ntsc.rs) 的图形界面汉化成中文、并新增 PAL 制式模拟的独立分支。
 
-- **只翻译 GUI 显示文本**（菜单、设置项、提示、对话框、渲染卡片）
-- **不修改数据层**（预设 JSON、配置键名、保存格式全部与上游一致）
-- **未收录词条原样保留**，预设名/文件名/路径/错误信息绝不会被改写
+- **汉化只翻译 GUI 显示文本**（菜单、设置项、提示、对话框、渲染卡片），未收录词条原样保留，预设名/文件名/路径/错误信息绝不会被改写
+- **PAL 是新增能力而非改写**：只新增 1 个设置项（`video_standard`，id=62），默认值为 NTSC；旧预设 JSON 缺该字段时自动落回 NTSC，上游预设 100% 可导入
+- **NTSC 行为不变**：选 NTSC 时算法路径与上游完全一致（有测试验证干净信号往返保真度两制式相同）
 
 ---
 
@@ -91,10 +93,14 @@ cargo test -p ntsc-rs-gui --lib translations
 | `crates/gui/src/app/license_dialog.rs` | 许可证窗口标题 |
 | `crates/gui/src/app/third_party_licenses_dialog.rs` | 第三方许可证窗口标题 + "使用方：" |
 | `crates/gui/src/widgets/render_job.rs` | 渲染任务卡片（等待中/渲染中/已暂停/用时/错误/剩余时间/时间单位/打开所在文件夹） |
+| `crates/ntscrs/src/settings/standard.rs` | **PAL 新增**：`VideoStandard` 枚举（NTSC/PAL）、`NtscEffect.video_standard` 字段、setting_id 62「视频制式」描述符 |
+| `crates/ntscrs/src/ntsc.rs` | **PAL 核心**：`EffectCtx.pal` 标志、`pal_v_switch()` 逐行倒相（调制/解调/相位误差/相位噪声四处 Q 分量符号交替）、PAL 强制行间平均 |
+| `crates/ntscrs/src/settings/easy.rs` | 简易模式固定 NTSC（新字段初始化） |
+| `crates/ntscrs/tests/pal.rs` | **PAL 新增**：3 个行为测试（PAL≠NTSC 输出、相位误差表现为降饱和而非偏色、干净信号往返保真度与 NTSC 一致） |
 
 ### 覆盖范围
 
-- **全部**标准模式设置项（61 个 setting_id）的标签、枚举选项、悬停描述
+- **全部**标准模式设置项（62 个 setting_id，含 PAL 新增的「视频制式」）的标签、枚举选项、悬停描述
 - 顶部菜单 5 项 + 全部子菜单、左侧「效果/渲染」标签页
 - 渲染设置（编码器/位深/质量/压缩级别/隔行输出等）
 - 视频面板（保存帧/复制帧/静音/分屏/缩放预览等）
@@ -172,6 +178,18 @@ tr() 查找表 ──→ 中文渲染
 预设 JSON（id 序列化，与上游字节级兼容）
 ```
 
+### PAL 模拟的实现要点（路线 A）
+
+PAL 与 NTSC 的核心区别在色度传输：NTSC 副载波相位恒定，相位误差直接表现为**色调偏移**；PAL 让 Q 分量逐行倒相，接收机再把相邻两行平均，相位误差被折算成**饱和度损失**（PAL 名字本身 = Phase Alternating Line）。
+
+本分支只复刻观众可见的行为，不严格复刻副载波频率/场频等物理参数：
+
+1. **逐行倒相**：`pal_v_switch(line)` 在奇数行对 Q 分量乘 -1，调制、解调、相位误差、相位噪声四个位置使用同一个开关，保证编解码自洽；
+2. **行间平均**：PAL 模式下强制执行 `chroma_vert_blend`（相邻行色度平均，误差对消的前提）；
+3. **误差交替**：相位误差/相位噪声逐行取反，经行间平均后色相抵消、幅度残留——视觉上就是「色脏、饱和度抖，但色调不跑」。
+
+测试数据（同一张测试图、同一误差强度）：NTSC 相位误差边际差异 27.4（明显偏色），PAL 5.6（轻微降饱和）；无误差时两制式干净信号往返偏差一致（57.9 vs 57.3，差异在噪声随机性范围内）。
+
 ---
 
 ## 五、如何修改
@@ -215,5 +233,6 @@ pub fn tr(text: &str) -> &str { text }
 ## 六、补充说明
 
 - 本分支基于上游 `0.9.6`。
-- 汉化仅影响 `crates/gui`（图形界面），`crates/ntscrs`（核心算法）与 CLI 未改动。
-- 若需发布，建议：fork 仓库 → `cargo xtask windows-bundle --release` → 把整个 `build\ntsc-rs-windows-standalone\` 压成 zip 传 GitHub Releases（与上游 release 产物形态一致）；README 已含构建指引，可打包进发行说明。
+- 汉化仅影响 `crates/gui`（图形界面）；PAL 功能改动 `crates/ntscrs`（核心算法），但所有改动都是**加法**（新枚举/新字段 id=62/新测试），默认 NTSC 路径与上游一致；CLI 未改动。
+- 发布形态：独立仓库（非 fork 关系），README 与本文件均标注上游来源，各 crate 原许可证文件完整保留（核心库 MIT/ISC/Apache-2.0，GUI GPL-3.0）。
+- 发布产物：`cargo xtask windows-bundle --release` → 把整个 `build\ntsc-rs-windows-standalone\` 压成 zip 传 Releases（与上游 release 产物形态一致）。

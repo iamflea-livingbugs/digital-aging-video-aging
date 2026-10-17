@@ -9,6 +9,16 @@
 
 ---
 
+> **Fork notice / 分支说明**
+>
+> This is an independent downstream build of [ntsc-rs/ntsc-rs](https://github.com/ntsc-rs/ntsc-rs) (upstream `0.9.6`) with two additions:
+> 1. **Simplified Chinese GUI localization** (display layer only; presets, setting keys and save formats stay byte-compatible with upstream).
+> 2. **PAL video-standard simulation** (new "Video standard" setting; NTSC remains the default, old presets load unchanged).
+>
+> 中文说明见 [README-zh-Hans.md](./README-zh-Hans.md)。本仓库不隶属于上游项目，原项目名称与许可证归原作者所有。
+
+---
+
 **ntsc-rs** is a video effect which emulates NTSC and VHS video artifacts. It can be used as an After Effects, Premiere, or OpenFX plugin, or as a standalone application.
 
 ![Screenshot of the ntsc-rs standalone application](./docs/img/appdemo.png)
